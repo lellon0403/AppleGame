@@ -30,6 +30,9 @@ int board_sum_in_rect(const Board *board,
                       int board_x, int board_y, int cell_size);
 ```
 
+> **코드 설명**
+> - `board_x, board_y, cell_size`를 파라미터로 받는 이유: board 모듈이 render.h의 상수(`BOARD_X`, `CELL_SIZE`)에 직접 의존하지 않기 위해서. board.c는 "데이터 담당"이고, render.h는 "화면 담당"이므로 서로 몰라야 한다. 값을 외부에서 넘겨주는 방식으로 의존성을 분리
+
 `board.c`에 구현 추가:
 
 ```c
@@ -67,6 +70,13 @@ int board_sum_in_rect(const Board *board,
     return sum;
 }
 ```
+
+> **코드 설명**
+> - `rx0, ry0, rx1, ry1` : Rectangle의 4개 경계선 좌표. `rect.x`는 좌측, `rect.x + rect.width`는 우측
+> - `if (board->grid[r][c].removed) continue;` : 이미 제거된 사과는 건너뜀. `continue`는 for 루프의 이번 반복을 중단하고 다음으로 넘어가는 키워드
+> - `float cx = board_x + c * cell_size + cell_size / 2.0f` : render.c의 `draw_apple`에서 원 중심을 계산하는 공식과 **완전히 동일**. 이 일관성이 중요 — 보이는 위치와 판단하는 위치가 일치해야 한다
+> - `cx >= rx0 && cx <= rx1 && cy >= ry0 && cy <= ry1` : 셀 중심이 드래그 박스의 4개 경계 안에 모두 있는지 확인. 4개 조건을 `&&`로 연결
+> - **셀 중심 방식**: 셀 중심이 박스 안에 있을 때만 포함. 이 방식이 구현이 단순하고 오조작이 적어 채택
 
 > **설계 결정**: 원작 게임은 사과 셀의 "임의의 픽셀이 조금이라도 겹치면" 포함되는 방식이다.
 > 그러나 "셀 중심이 박스 안에 있을 때만 포함"하는 방식이 구현이 단순하고 오조작이 적어 여기서는 이 방식을 채택한다.
@@ -108,6 +118,13 @@ while (!WindowShouldClose())
 ```
 
 `main.c`에 `#include <stdio.h>` 추가 (sprintf 사용)
+
+> **코드 설명**
+> - `int current_sum = 0;` 을 if문 밖에서 선언하고 0으로 초기화: 드래그 중이 아닐 때는 0 유지. 드래그 중일 때만 계산해서 덮어씌움
+> - `if (game.drag.active)` : 드래그 중일 때만 합산. 드래그가 없을 때 매 프레임 170개 사과를 순회하는 것은 불필요
+> - `drag_to_rect(&game.drag)` : DragBox를 정규화된 Rectangle로 변환. board_sum_in_rect가 Rectangle을 받기 때문
+> - `BOARD_X, BOARD_Y, CELL_SIZE` : render.h에 정의된 상수. `#include "render.h"`가 있어야 사용 가능
+> - `char debug[32]; sprintf(debug, "SUM: %d", current_sum);` : `sprintf`는 `printf`처럼 서식 문자열을 처리하는데, 화면 출력 대신 문자 배열에 저장한다. `DrawText`는 문자열 포인터를 받으므로 이 방식으로 숫자를 텍스트로 변환
 
 ---
 
@@ -167,6 +184,9 @@ if (sx1 > rx0 && sx0 < rx1 && sy1 > ry0 && sy0 < ry1) {
     sum += board->grid[r][c].value;
 }
 ```
+
+> **코드 설명**
+> - `sx1 > rx0 && sx0 < rx1` : 두 선분이 겹치는 조건. "셀 우측이 박스 좌측보다 오른쪽" AND "셀 좌측이 박스 우측보다 왼쪽" → 가로 방향으로 겹침. 세로도 같은 방식으로 확인
 
 ---
 

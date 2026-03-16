@@ -27,6 +27,11 @@ C:\libs\raylib\
 └── ...
 ```
 
+> **구조 설명**
+> - `include\raylib.h` : **함수 선언**이 들어있는 헤더 파일. `#include "raylib.h"`를 쓰면 이 파일을 읽는다. 레시피 목록처럼 "이런 함수가 있다"는 정보만 담김
+> - `lib\raylib.lib` : **함수의 실제 구현(기계어)**이 들어있는 라이브러리 파일. 컴파일 마지막 단계(링크)에서 우리 코드와 합쳐진다
+> - 이 두 파일의 위치를 Visual Studio에 알려주는 것이 3단계의 핵심
+
 ---
 
 ## 2단계 — Visual Studio 프로젝트 생성
@@ -70,6 +75,15 @@ C:\libs\raylib\lib
 ```
 raylib.lib;winmm.lib;gdi32.lib;opengl32.lib;
 ```
+
+> **설정 설명**
+> - **추가 포함 디렉터리** : `#include "raylib.h"` 를 만났을 때 어느 폴더에서 찾을지 알려주는 설정. 설정 안 하면 `cannot open source file "raylib.h"` 오류 발생
+> - **추가 라이브러리 디렉터리** : `.lib` 파일이 있는 폴더 위치. 설정 안 하면 링크 오류 발생
+> - **추가 종속성** : 실제로 링크할 `.lib` 파일 이름 목록
+>   - `raylib.lib` : Raylib 본체
+>   - `winmm.lib` : Windows 멀티미디어 (오디오 등) — Raylib가 내부적으로 사용
+>   - `gdi32.lib` : Windows 그래픽 장치 인터페이스 — Raylib가 내부적으로 사용
+>   - `opengl32.lib` : OpenGL 렌더링 엔진 — Raylib가 내부적으로 사용
 
 ### 3-4. 서브시스템 설정 (콘솔 창 없애기, 선택)
 ```
@@ -117,6 +131,16 @@ int main(void)
     return 0;
 }
 ```
+
+> **코드 설명**
+> - `#include "raylib.h"` : 꺾쇠(`<stdio.h>`)가 아닌 따옴표(`"raylib.h"`)를 쓴 이유 — 표준 라이브러리가 아니라 우리가 직접 경로를 알려준 헤더이기 때문. Visual Studio가 3단계에서 설정한 포함 디렉터리에서 찾는다
+> - `InitWindow(1010, 600, "Fruit Box")` : OS에 1010×600 픽셀 창을 만들어달라고 요청. 이 함수를 호출하기 전에는 그리기 함수를 쓸 수 없다
+> - `SetTargetFPS(60)` : 게임 루프가 1초에 최대 60번 돌도록 속도를 제한. 이보다 빠르게 돌아도 Raylib가 자동으로 잠깐 대기시켜 속도를 맞춰준다
+> - `while (!WindowShouldClose())` : ESC 키를 누르거나 창의 X 버튼을 누르면 `WindowShouldClose()`가 `true`를 반환 → `!`(NOT)로 뒤집어서 루프를 탈출한다. **이것이 게임 루프의 핵심 구조**
+> - `BeginDrawing()` / `EndDrawing()` : 이 두 함수 사이에서만 화면에 그림을 그릴 수 있다. **더블 버퍼링** 방식으로 화면 깜빡임을 방지 — `BeginDrawing`에서 뒷면 버퍼에 그린 후, `EndDrawing`에서 앞면과 교체
+> - `ClearBackground((Color){ 30, 30, 30, 255 })` : 매 프레임 화면 전체를 지정한 색으로 덮어씌워 이전 프레임의 그림을 지운다. `Color`는 `{R, G, B, A}` 구조체이고, 숫자는 0~255 범위. 255는 완전 불투명
+> - `DrawText("...", 20, 20, 24, WHITE)` : 좌측에서 20px, 상단에서 20px 위치에 폰트 크기 24로 텍스트를 그린다. `WHITE`는 Raylib가 미리 정의해둔 색상 상수
+> - `CloseWindow()` : 창을 닫고 Raylib 내부 메모리를 모두 해제. 프로그램 종료 전 반드시 호출해야 메모리 누수를 막을 수 있다
 
 ---
 

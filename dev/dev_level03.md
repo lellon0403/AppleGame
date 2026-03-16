@@ -21,6 +21,10 @@ src/
 └── render.c      ← 새로 생성
 ```
 
+> **구조 설명**
+> - 화면에 그리는 기능을 `render.h / render.c`로 분리. board.c가 "데이터 담당"이라면 render.c는 "화면 출력 담당"
+> - 이렇게 역할별로 파일을 나누면 나중에 렌더링 방식을 바꿀 때 render.c만 수정하면 된다
+
 ---
 
 ## 2단계 — render.h 작성
@@ -50,6 +54,12 @@ void draw_board(const Board *board, bool thin_color);
 
 #endif /* RENDER_H */
 ```
+
+> **코드 설명**
+> - `#define CELL_SIZE 54` : 사과 한 칸의 픽셀 크기. 17열 × 54px = 918px, 10행 × 54px = 540px. 창 크기 1010×600 안에 딱 맞는 값
+> - `BOARD_X`, `BOARD_Y` : 게임판이 창의 좌측 상단 모서리에서 얼마나 떨어져 있는지. 여백(패딩) 역할
+> - `bool thin_color` : 연한 색 모드 여부. 원작의 「薄い色」 기능 (Level 09에서 완성). 지금은 `false`로 고정해서 쓴다
+> - `Color` : Raylib가 정의한 `{unsigned char r, g, b, a}` 구조체
 
 ---
 
@@ -117,6 +127,17 @@ void draw_board(const Board *board, bool thin_color)
 }
 ```
 
+> **코드 설명**
+> - `palette[value - 1]` : 배열 인덱스는 0부터 시작하는데 value는 1~9이므로, `value - 1`로 0~8 인덱스로 맞춘다. value가 1이면 `palette[0]` (빨강), 9이면 `palette[8]` (갈색)
+> - `float cx = BOARD_X + col * CELL_SIZE + CELL_SIZE / 2.0f` : 셀의 **중심** 픽셀 좌표 계산. `BOARD_X`(게임판 시작점) + `col * CELL_SIZE`(해당 열의 시작점) + `CELL_SIZE / 2.0f`(셀 중앙까지)
+> - `CELL_SIZE / 2.0f - 3.0f` : 반지름. `2.0f`처럼 f를 붙이는 이유 — 정수 나눗셈을 방지. `54 / 2`는 정수 27이지만, `54 / 2.0f`는 실수 27.0. 여기서는 결과가 같지만 소수점이 있는 경우 차이가 남
+> - `(unsigned char)(base.r / 2 + 100)` : R,G,B 값을 반으로 줄이고 100을 더해서 연한(파스텔) 색으로 만든다. `unsigned char`로 캐스팅해 0~255 범위를 보장
+> - `DrawCircleV((Vector2){ cx, cy }, radius, base)` : `Vector2`는 Raylib가 정의한 `{float x, float y}` 구조체. `(Vector2){ cx, cy }`는 즉석에서 구조체를 만드는 C99 복합 리터럴 문법
+> - `(Color){ 0, 0, 0, 60 }` : 검정색인데 알파(투명도)가 60 → 약 24% 불투명. 반투명 테두리 효과
+> - `char buf[2] = { (char)('0' + apple->value), '\0' }` : 정수 `3`을 문자 `'3'`으로 변환하는 트릭. `'0'`의 ASCII 값은 48, `3`을 더하면 51 = `'3'`의 ASCII. `'\0'`은 문자열 끝 표시 (null terminator)
+> - `MeasureText(buf, font_size)` : 이 텍스트를 그렸을 때의 픽셀 **너비**를 반환. 반으로 나눠서 빼면 텍스트를 중앙 정렬할 수 있다
+> - `draw_board` : 이중 for문으로 전체 10×17 격자를 순회. **주의**: 바깥쪽이 행(r), 안쪽이 열(c). `draw_apple`에 넘길 때는 `(c, r)` 순서로 넘긴다 (함수 인터페이스가 col, row 순)
+
 ---
 
 ## 4단계 — main.c 수정
@@ -156,6 +177,11 @@ int main(void)
     return 0;
 }
 ```
+
+> **코드 설명**
+> - `#include "render.h"` 추가: 이제 `draw_board` 함수를 사용할 수 있다. render.h가 내부적으로 `#include "board.h"`를 하므로, main.c에서 board.h를 따로 include하지 않아도 되지만 명시적으로 포함하는 것이 더 명확하다
+> - `draw_board(&board, false)` : 두 번째 인자 `false`는 연한 색 모드 비활성화. Level 09에서 `game.thinColor` 값으로 교체할 예정
+> - `board_init`을 `InitWindow` **이전**에 호출: 창이 열리기 전에 데이터를 준비. 반드시 이 순서일 필요는 없지만 논리적으로 자연스러움
 
 ---
 

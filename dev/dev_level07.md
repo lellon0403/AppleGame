@@ -67,6 +67,13 @@ void check_all_cleared(Game *game)
 }
 ```
 
+> **코드 설명**
+> - `if (game->state != STATE_PLAYING) return;` : 메뉴 화면이나 게임오버 상태에서는 타이머가 동작하지 않도록 보호. 이 줄이 없으면 게임오버 화면에서도 타이머가 계속 줄어든다
+> - `GetFrameTime()` : Raylib 함수. **이전 프레임을 처리하는 데 걸린 실제 시간(초)**를 반환. `SetTargetFPS(60)`이면 약 0.0167초. 이 값을 빼면 프레임 수와 무관하게 실제 시간 기반으로 카운트다운된다. `game->timeLeft -= 1`처럼 고정값을 빼면 60FPS에서는 60배 빠르게 줄어드는 버그 발생
+> - `game->timeLeft = 0.0f` : 0 이하가 되면 강제로 0으로 고정. 음수가 되지 않게 보호
+> - **check_all_cleared 로직**: 모든 170개 사과를 이중 for문으로 순회. `removed`가 false인 사과가 하나라도 있으면 즉시 `return`(미클리어). 함수 끝까지 도달한다는 것 = 전부 removed = 올 클리어
+> - `game->clearTime = 120.0f - game->timeLeft` : 소요 시간 = 전체 시간 - 남은 시간. 게임오버 화면에서 "X초 만에 클리어"로 표시
+
 ---
 
 ## 2단계 — render.c에 타이머 + 게임오버 화면 추가
@@ -166,6 +173,16 @@ void draw_gameover(const Game *game)
 }
 ```
 
+> **코드 설명**
+> - `float ratio = time_left / time_total` : 0.0(시간 없음) ~ 1.0(가득 참) 비율 계산. `time_total`은 120.0f로 전달
+> - `if (ratio < 0.0f) ratio = 0.0f;` : 혹시 음수가 되는 경우 방어. 게이지 크기를 음수로 그릴 수 없다
+> - `int filled = (int)(bar_height * ratio)` : 비율에 따른 픽셀 높이. ratio=1.0이면 540px, ratio=0.5이면 270px
+> - `bar_y + (bar_height - filled)` : 게이지가 **아래에서 위로** 줄어드는 효과. 전체 게이지 높이에서 채워진 높이를 빼면 "빈 공간 높이"가 되고, 그만큼 y를 내려서 시작
+> - `ratio > 0.5f` → 초록, `ratio > 0.25f` → 노랑, 그 외 → 빨강: 시간 경과에 따라 시각적으로 긴박감 전달
+> - `(int)time_left + 1` : 남은 시간을 올림으로 표시. 59.9초면 60으로 표시. 0.0초가 되기 직전에 "0"이 표시되지 않도록 함
+> - `DrawRectangle(0, 0, 1010, 600, (Color){ 0, 0, 0, 170 })` : 화면 전체를 알파 170(약 67% 불투명)의 검정으로 덮어 반투명 오버레이 효과. 게임판이 흐릿하게 비쳐 보인다
+> - `1010 / 2 - MeasureText("ALL CLEAR!", 60) / 2` : 창 너비의 중앙에서 텍스트 너비의 절반을 빼면 정중앙 x 좌표
+
 ---
 
 ## 3단계 — main.c 수정
@@ -245,6 +262,12 @@ int main(void)
     return 0;
 }
 ```
+
+> **코드 설명**
+> - `switch (game.state)` : 상태별로 다른 업데이트 로직을 실행. if-else if 연속보다 가독성이 좋고 빠뜨린 상태를 `default`로 처리할 수 있다
+> - `case STATE_PLAYING:` 블록에만 `drag_update`, `game_try_remove`, `timer_update`, `check_all_cleared`가 있다. 게임오버 상태에서는 이 함수들이 실행되지 않는다
+> - `case STATE_GAMEOVER:` : R키만 감지. `IsKeyPressed(KEY_R)` 는 R을 방금 누른 첫 프레임에만 true
+> - **렌더링은 switch 밖**: 게임판, 드래그 박스, 점수, 타이머는 항상 그리고, 게임오버 상태일 때 추가로 오버레이를 그리는 방식. STATE_PLAYING과 STATE_GAMEOVER 화면이 분리되지 않고 자연스럽게 겹쳐진다
 
 ---
 

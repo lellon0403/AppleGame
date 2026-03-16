@@ -33,6 +33,15 @@ fruit_box/
     └── sounds/         # (선택) BGM, 효과음
 ```
 
+> **구조 설명**
+> - 각 `.h/.c` 쌍은 하나의 역할만 담당. C 언어에서 파일을 역할별로 나누는 것이 관례
+> - `main.c` : 게임 루프만 담당. 비즈니스 로직은 각 모듈에 위임
+> - `board.h/.c` : 데이터 구조(Apple, Board)와 그 조작 함수
+> - `input.h/.c` : 마우스 입력 처리
+> - `render.h/.c` : 화면 그리기. 여기에 `CELL_SIZE`, `BOARD_X`, `BOARD_Y` 레이아웃 상수가 정의됨
+> - `timer.h/.c` : 타이머 및 올 클리어 판정
+> - `game.h/.c` : 위 모듈들을 연결하는 중심. `Game` 구조체와 상태 전환 로직
+
 ---
 
 ## 데이터 구조 설계
@@ -45,6 +54,10 @@ typedef struct {
     bool removed;   // 제거 여부
 } Apple;
 ```
+
+> **코드 설명**
+> - `int value` : 사과에 적힌 숫자. 1~9 범위
+> - `bool removed` : 사과를 실제로 배열에서 삭제하지 않고, 이 플래그로 "제거됨"을 표시. 렌더링과 합산 모두 이 값을 보고 무시할지 결정
 
 ### 게임판
 
@@ -59,6 +72,10 @@ typedef struct {
 } Board;
 ```
 
+> **코드 설명**
+> - `Apple grid[ROWS][COLS]` : 2차원 배열. `grid[행][열]`로 접근. 총 10×17 = 170개의 Apple
+> - `int score` : Board에 포함되어 있지만, Level 04에서 Game 구조체로 이동됨. 최종 설계에서는 `Game.score`를 사용
+
 ### 드래그 선택 박스
 
 ```c
@@ -68,6 +85,11 @@ typedef struct {
     bool active;     // 드래그 중 여부
 } DragBox;
 ```
+
+> **코드 설명**
+> - `Vector2` : Raylib가 정의한 `{float x, float y}` 구조체. 픽셀 좌표를 표현
+> - `bool active` : 드래그 중이 아닐 때 박스를 그리거나 합산하지 않기 위한 플래그
+> - `start`와 `end`를 분리 보관하는 이유: 드래그 방향(좌→우, 우→좌 등)을 후처리(`drag_to_rect`)에서 정규화하기 위해
 
 ### 게임 전체 상태
 
@@ -87,6 +109,12 @@ typedef struct {
     float clearTime;  // 올 클리어 소요 시간
 } Game;
 ```
+
+> **코드 설명**
+> - `typedef enum { ... } GameState` : 열거형. 게임이 어느 상태에 있는지를 이름 있는 정수로 표현. `STATE_MENU=0`, `STATE_PLAYING=1`, `STATE_GAMEOVER=2`로 내부 저장됨
+> - **상태 머신(State Machine)**: main.c의 `switch(game.state)`에서 각 상태에 맞는 로직만 실행. 상태 간 전환은 명확한 조건(SPACE 누름, 시간 종료, 올 클리어)에서만 발생
+> - `float timeLeft` : 초 단위. 매 프레임 `GetFrameTime()`(이전 프레임 경과 시간)만큼 감소
+> - `float clearTime` : 게임오버 화면에서 "X초 만에 클리어" 표시용. `120.0f - timeLeft`로 계산
 
 ---
 
@@ -126,6 +154,12 @@ void board_init(Board *board) {
 }
 ```
 
+> **코드 설명**
+> - `do { ... } while(조건)` : 한 번은 반드시 실행하고, 조건이 맞을 때까지 반복. 조건을 만족하는 배치가 나올 때까지 170개 숫자를 계속 새로 생성
+> - `rand() % 9 + 1` : 0~8 범위를 1~9로 이동. `rand()` 사용 전 `srand(time(NULL))` 호출 필수
+> - **Fisher-Yates 셔플**: 뒤에서부터 앞으로 이동하며 무작위 위치와 교환. 모든 순열이 동일한 확률로 나오는 것이 수학적으로 보장된 완전 셔플 알고리즘
+> - `values[r * COLS + c]` : 1차원 배열을 2차원 격자로 읽기. r행 c열 = `r * 17 + c` 번 인덱스
+
 ---
 
 ## 핵심 로직
@@ -144,6 +178,10 @@ void board_init(Board *board) {
 int pixel_to_col(float x) { return (int)((x - BOARD_X) / CELL_SIZE); }
 int pixel_to_row(float y) { return (int)((y - BOARD_Y) / CELL_SIZE); }
 ```
+
+> **코드 설명**
+> - `(x - BOARD_X) / CELL_SIZE` : 게임판 시작점(BOARD_X)으로부터의 거리를 셀 크기로 나누면 열 인덱스가 나온다. 예: x=128 → (128-20)/54 = 2.0 → 열 2
+> - `(int)` 캐스팅: 소수점을 버려 정수 인덱스를 얻는다. 이 방식은 경계에 주의해야 한다. 실제 구현(board_sum_in_rect)에서는 셀 중심 좌표와 비교하는 방식을 채택
 
 ### 드래그 박스 내 사과 합산
 
@@ -169,6 +207,12 @@ int sum_in_drag(Board *board, DragBox *drag) {
 }
 ```
 
+> **코드 설명**
+> - `fminf(a, b)` / `fmaxf(a, b)` : float용 최솟값/최댓값 함수 (`<math.h>` 필요). 정수용은 `min/max`이지만 C 표준에는 없어서 직접 구현하거나 삼항 연산자를 쓰는 경우도 많다
+> - `fmaxf(0, pixel_to_col(x0))` : 열 인덱스가 0 미만이 되지 않도록 클램핑(경계 제한). 게임판 밖으로 드래그했을 때 배열 범위를 벗어나지 않도록 보호
+> - `fminf(COLS - 1, ...)` : 열 인덱스가 16(최대)을 넘지 않도록 클램핑
+> - **주의**: 이 설계는 dev_level05에서 "셀 중심 기반" 방식으로 변경됨. 위 코드는 개념 이해용
+
 ### 사과 제거 및 점수 획득
 
 ```c
@@ -185,6 +229,10 @@ void try_remove(Game *game) {
     game->drag.active = false;
 }
 ```
+
+> **코드 설명**
+> - `if (!game->drag.active) return;` : 방어 코드. 드래그 중이 아닌데 호출됐을 때 즉시 종료
+> - 합산과 제거를 **같은 범위 순회 로직**으로 처리하는 것이 핵심. 로직이 다르면 "합은 10인데 다른 사과 제거" 버그 발생
 
 ---
 
@@ -206,6 +254,12 @@ void input_update(Game *game) {
 }
 ```
 
+> **코드 설명**
+> - `IsMouseButtonPressed` : 클릭 첫 프레임만. 드래그 시작점 기록
+> - `IsMouseButtonDown` : 누르는 동안 매 프레임. 끝점을 현재 마우스 위치로 갱신
+> - `IsMouseButtonReleased` : 놓는 첫 프레임만. 사과 제거 시도
+> - 실제 구현(Level 06)에서는 `released` 처리를 main.c로 이동 — `game_try_remove`가 `drag.active = false`를 내부에서 처리하기 때문
+
 ---
 
 ## 타이머
@@ -220,6 +274,10 @@ void timer_update(Game *game) {
     }
 }
 ```
+
+> **코드 설명**
+> - `GetFrameTime()` : 이전 프레임이 처리된 실제 시간(초). 60FPS에서 약 0.0167초. 이 값을 누적해서 빼면 프레임 수와 무관하게 정확한 초 단위 카운트다운이 된다
+> - `game->timeLeft = 0.0f` : 음수 방지. 게임오버 화면에서 남은 시간이 음수로 표시되지 않도록
 
 ---
 
@@ -237,6 +295,10 @@ BeginDrawing()
   └─ (STATE_GAMEOVER 시) draw_result()
 EndDrawing()
 ```
+
+> **렌더링 순서 설명**
+> - 나중에 그릴수록 화면 앞쪽에 표시된다. 드래그 박스가 사과 위에 보이려면 `draw_board` 이후에 `draw_drag_box`를 호출해야 한다
+> - 게임오버 오버레이가 가장 마지막에 그려져야 모든 것을 덮는다
 
 ### 사과 이미지 방식 선택
 
@@ -266,6 +328,11 @@ void draw_apple(int col, int row, Apple *apple, bool thin_color) {
     DrawText(buf, (int)x - tw / 2, (int)y - 10, 20, WHITE);
 }
 ```
+
+> **코드 설명**
+> - `CELL_SIZE / 2.0f` : 셀의 중심 좌표. col * CELL_SIZE는 셀 왼쪽 끝, 여기에 반 칸을 더하면 중심
+> - `Fade(base, 0.5f)` : Raylib 함수. 색상의 알파(투명도)를 50%로 줄여 연한 색 효과. dev_level03에서는 RGB 직접 조정 방식을 사용하는데, Fade 방식과 다른 결과가 나올 수 있다
+> - `char buf[2] = { '0' + apple->value, '\0' }` : 정수 → 문자 변환. '0'(48) + 3 = '3'(51)
 
 #### 방식 B — PNG 이미지 사용
 
@@ -301,6 +368,11 @@ void assets_unload(Assets *a) {
 }
 ```
 
+> **코드 설명**
+> - `Texture2D` : Raylib가 정의한 GPU 텍스처 타입. `LoadTexture`로 PNG 파일을 GPU 메모리에 올린다
+> - `LoadTexture` / `UnloadTexture` : 게임 시작 시 1회 로드, 종료 시 1회 해제. 매 프레임 로드하면 메모리 누수와 심각한 성능 저하
+> - `assets_unload`를 `CloseWindow()` 전에 호출해야 GPU 메모리 해제가 정상 처리됨
+
 ##### 이미지로 사과 한 개 그리기
 
 ```c
@@ -330,6 +402,12 @@ void draw_apple_texture(int col, int row, Apple *apple,
 }
 ```
 
+> **코드 설명**
+> - `Color tint` : **색조(tint)**. 이미지의 각 픽셀 색상에 tint 색을 곱해서 색을 바꾼다. 흰색 이미지라면 tint 색 그대로 표시됨. 사과 이미지 1장으로 9가지 색을 표현하는 핵심
+> - `Rectangle src` : 원본 이미지에서 잘라낼 영역. 전체 이미지를 쓰므로 `{0, 0, width, height}`
+> - `Rectangle dest` : 화면에 그릴 목적지 영역. `{x, y, CELL_SIZE, CELL_SIZE}`로 이미지를 54×54로 스케일
+> - `DrawTexturePro(tex, src, dest, origin, rotation, tint)` : 원본 영역을 목적지 영역에 그리는 함수. `origin`은 회전 기준점(좌상단), `rotation`은 각도(0=회전 없음)
+
 ##### 색조(tint) 팔레트
 
 ```c
@@ -349,6 +427,10 @@ Color apple_color(int value) {
     return palette[value - 1];
 }
 ```
+
+> **코드 설명**
+> - `palette[value - 1]` : value가 1~9이고 배열 인덱스는 0~8이므로 -1 보정
+> - `Color` 는 `{R, G, B, A}` 각 0~255. 255가 최대(완전 불투명)
 
 ##### Assets를 Game 구조체에 포함
 
@@ -375,6 +457,9 @@ game->assets = assets_load();
 assets_unload(&game->assets);
 ```
 
+> **코드 설명**
+> - **생명주기(lifecycle)**: GPU 메모리를 할당(Load)하면 반드시 해제(Unload)해야 한다. `CloseWindow()` 이후에 해제하면 이미 그래픽 시스템이 종료되어 문제가 생길 수 있으므로 그 전에 호출
+
 ### 드래그 박스 색상
 
 ```c
@@ -391,6 +476,10 @@ float ratio = game->timeLeft / 120.0f;  // 0.0~1.0
 int   barH  = (int)(400 * ratio);
 DrawRectangle(980, 20 + (400 - barH), 20, barH, GREEN);
 ```
+
+> **코드 설명**
+> - `ratio = timeLeft / 120.0f` : 남은 시간을 0.0~1.0 비율로 정규화
+> - `20 + (400 - barH)` : 게이지가 아래에서 위로 줄어드는 효과. `barH`가 줄어들수록 y 시작점이 내려가고 높이도 줄어든다
 
 ---
 
@@ -432,6 +521,11 @@ int main(void) {
 }
 ```
 
+> **코드 설명**
+> - `Game game = {0}` : 구조체 전체를 0으로 초기화. C에서 구조체를 선언만 하면 쓰레기값이 들어있으므로, game_init 호출 전 안전하게 초기화
+> - `switch(game.state)` : 상태 머신의 핵심. 각 case는 해당 상태에서만 실행되는 로직
+> - `render(&game)` : 실제 구현에서는 여러 draw_ 함수 호출로 분리됨. 이 계획서에서는 개념 설명을 위해 단순화
+
 ---
 
 ## 올 클리어 판정
@@ -447,6 +541,10 @@ void check_all_cleared(Game *game) {
     game->state      = STATE_GAMEOVER;
 }
 ```
+
+> **코드 설명**
+> - **조기 탈출(early return)** 패턴: 제거되지 않은 사과가 하나라도 있으면 즉시 `return`. 함수 끝까지 도달 = 전부 제거됨 = 올 클리어. 170개를 전부 체크하는 것보다 빠른 평균 성능
+> - `clearTime = 120.0f - game->timeLeft` : 소요 시간 계산
 
 ---
 
@@ -480,6 +578,11 @@ void check_all_cleared(Game *game) {
 └──────────────────────────────────────────┴──┘
  ←──────────────── 1010px ──────────────────→
 ```
+
+> **레이아웃 설명**
+> - 게임판: 17×54 = 918px 너비, 10×54 = 540px 높이. BOARD_X=20 좌측 여백
+> - 우측 게이지 바: 960~982px 범위 (22px 너비)
+> - 하단 여백: 게임판 아래(570px~600px)에 점수와 버튼 배치
 
 ---
 

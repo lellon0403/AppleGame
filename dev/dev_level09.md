@@ -45,6 +45,10 @@ case STATE_PLAYING:
     break;
 ```
 
+> **코드 설명**
+> - `game.thinColor = !game.thinColor` : `!`(NOT 연산자)로 bool 값을 반전. `true`이면 `false`로, `false`이면 `true`로 전환. 이것이 **토글(toggle)** 패턴의 가장 간결한 구현
+> - `IsKeyPressed(KEY_T)` : T키를 방금 누른 첫 프레임에만 true. `IsKeyDown`을 쓰면 누르는 동안 매 프레임 토글되어 빠르게 깜빡이는 버그 발생
+
 ---
 
 ## 3단계 — render.c에 토글 버튼 추가
@@ -102,6 +106,15 @@ bool draw_thin_button(bool thin_color)
 }
 ```
 
+> **코드 설명**
+> - `Rectangle btn = { .x = ..., .y = ..., ... }` : C99 지정 초기화자(designated initializer). 필드 이름을 명시해서 가독성을 높임. `{ BOARD_X + 160, ..., 100, 26 }`처럼 순서만으로도 가능하지만 이 방식이 더 명확하다
+> - `BOARD_Y + ROWS * CELL_SIZE + 4` : 게임판 바닥(점수 표시 위치)보다 4px 아래. `draw_score`와 같은 y 범위에 나란히 배치
+> - `CheckCollisionPointRec(mouse, btn)` : Raylib 함수. 점(마우스 좌표)이 사각형(버튼 영역) 안에 있으면 `true`. 마우스 호버 감지에 사용
+> - `bool clicked = hovered && IsMouseButtonReleased(...)` : 두 조건을 AND로 연결. 버튼 위에 있을 때 마우스를 뗐을 때만 `clicked = true`
+> - **3단계 상태 분기**: `thin_color`(활성) > `hovered`(호버) > 기본 순서로 조건 체크. if-else if-else 패턴으로 우선순위를 표현
+> - `thin_color ? BLACK : WHITE` : 활성(연한 색 ON) 상태일 때는 밝은 배경에 검정 텍스트, 비활성일 때는 어두운 배경에 흰색 텍스트로 대비를 높임
+> - **반환값 bool**: 이 함수는 그리기뿐만 아니라 클릭 여부를 반환한다. main.c에서 이 값을 받아 thinColor를 토글하는 데 사용
+
 ---
 
 ## 4단계 — main.c 렌더링 블록에 버튼 추가
@@ -126,6 +139,10 @@ if (game.state == STATE_PLAYING || game.state == STATE_GAMEOVER) {
     }
 }
 ```
+
+> **코드 설명**
+> - `if (draw_thin_button(game.thinColor))` : 함수 호출 결과를 if 조건으로 직접 사용. 버튼이 클릭되면(`true`) thinColor를 토글. Level 07까지는 `draw_score`, `draw_timer_bar`만 있었는데 여기서 버튼 그리기를 추가
+> - 게임오버 상태에서도 버튼을 표시(`|| game.state == STATE_GAMEOVER`): 결과 화면에서도 연한 색 모드를 켜고 끌 수 있게
 
 > **주의**: `draw_thin_button`이 `IsMouseButtonReleased`를 내부적으로 감지하므로
 > 게임 로직의 `game_try_remove`와 충돌할 수 있다.
@@ -173,6 +190,11 @@ if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
 }
 ```
 
+> **코드 설명**
+> - **충돌 문제**: `IsMouseButtonReleased`는 draw_thin_button 안에서도, game_try_remove 전에도 모두 감지된다. 버튼 위에서 클릭을 떼면 두 가지가 동시에 실행된다. 버튼 클릭 = thinColor 토글, 사과 제거 시도 = 두 번 발생
+> - `!CheckCollisionPointRec(mouse, btn)` : 마우스가 버튼 영역 **밖**에 있을 때만 game_try_remove 호출. 버튼 영역 안이면 사과 제거를 건너뜀
+> - `get_thin_button_rect()` : 버튼의 Rectangle 위치를 함수로 분리. draw_thin_button과 main.c 두 곳에서 같은 좌표를 사용하는데, 함수 하나로 통일하면 위치를 바꿀 때 한 곳만 수정하면 된다
+
 ---
 
 ## 6단계 — 빌드 및 확인
@@ -207,6 +229,10 @@ if (thin_color) {
 ```c
 if (thin_color) base.a = 130;   /* 0~255, 낮을수록 투명 */
 ```
+
+> **코드 설명**
+> - `base.r / 2 + 100` : R 채널을 절반으로 줄이고 100을 더한다. 원래 220이었다면 220/2 + 100 = 210이 되어 비슷하게 밝지만, 원래 50이었다면 50/2 + 100 = 125가 되어 훨씬 밝아진다 → 전체적으로 색들이 비슷한 밝기(파스텔톤)로 수렴
+> - `base.a = 130` : 투명도를 낮추는 방법. 130/255 ≈ 51% 불투명 → 배경색이 비쳐 보이면서 연해 보임. 이 방법은 배경색(어두운 회색)에 따라 결과가 달라진다
 
 ---
 

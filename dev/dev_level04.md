@@ -50,6 +50,11 @@ Rectangle drag_to_rect(const DragBox *drag);
 #endif /* INPUT_H */
 ```
 
+> **코드 설명**
+> - `Vector2` : Raylib가 정의한 `{float x, float y}` 구조체. 픽셀 좌표를 표현할 때 사용
+> - `bool active` : 드래그 중인지 나타내는 플래그. 마우스를 누르면 `true`, 손을 떼면 `false`. 이 값이 `false`일 때는 박스를 그리지 않는다
+> - `drag_to_rect` 를 별도 함수로 분리한 이유: 드래그는 어느 방향으로든 할 수 있어서, start가 end보다 오른쪽이나 아래에 있을 수 있다. 이를 항상 "좌상단 기준" 사각형으로 정규화하는 작업이 필요하기 때문
+
 ---
 
 ## 3단계 — input.c 작성
@@ -91,6 +96,15 @@ Rectangle drag_to_rect(const DragBox *drag)
 }
 ```
 
+> **코드 설명**
+> - `IsMouseButtonPressed` : 버튼을 **방금 누른 첫 번째 프레임**에만 `true`. 누르는 동안 계속 `true`가 아님
+> - `IsMouseButtonDown` : 버튼을 **누르고 있는 동안 매 프레임** `true`. 드래그 중 좌표를 업데이트할 때 사용
+> - `IsMouseButtonReleased` : 버튼에서 **손을 뗀 첫 번째 프레임**에만 `true`. Level 06에서 이 시점에 사과 제거를 시도한다
+> - `GetMousePosition()` : 현재 마우스 커서의 픽셀 좌표를 `Vector2`로 반환. 창 좌측 상단이 (0, 0)
+> - `drag->end = drag->start` (Pressed 시점): 드래그 시작 직후에는 start와 end가 같은 위치. 이렇게 하지 않으면 이전 드래그의 end 위치가 남아있다
+> - **drag_to_rect 정규화**: 드래그를 오른쪽→왼쪽, 또는 아래→위로 하면 start.x > end.x 상황이 생긴다. `Rectangle`은 항상 좌상단 좌표와 양수 너비/높이가 필요하므로, 삼항 연산자(`? :`)로 작은 값을 x, y로 선택하고 두 값의 차이(절댓값)를 너비, 높이로 계산
+> - `(Rectangle){ x, y, w, h }` : C99 복합 리터럴. 구조체를 즉석에서 값으로 만들어 반환
+
 ---
 
 ## 4단계 — render.c에 드래그 박스 렌더링 추가
@@ -125,6 +139,13 @@ void draw_drag_box(const DragBox *drag, int sum)
     DrawRectangleLinesEx(rect, 2.0f, border_color);
 }
 ```
+
+> **코드 설명**
+> - `if (!drag->active) return;` : 드래그 중이 아니면 즉시 함수 종료. 박스를 그릴 필요가 없다
+> - `(sum == 10) ? RED : WHITE` : 삼항 연산자. 합이 10이면 빨간색, 아니면 흰색. Level 04에서는 sum을 항상 0으로 넘기므로 항상 흰색. Level 05에서 실제 합산값을 넘긴다
+> - `Fade(border_color, 0.12f)` : Raylib 함수. 색상의 알파값을 0.0(투명)~1.0(불투명) 비율로 조정. 0.12f = 12% 불투명 → 반투명 내부 채우기 효과
+> - `DrawRectangleRec(rect, color)` : Rectangle 구조체를 받아 사각형을 채워 그린다
+> - `DrawRectangleLinesEx(rect, 2.0f, color)` : Rectangle 구조체를 받아 두께 2px의 테두리만 그린다
 
 ---
 
@@ -163,6 +184,11 @@ void game_init(Game *game);
 #endif /* GAME_H */
 ```
 
+> **코드 설명**
+> - `typedef enum { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER } GameState;` : **열거형**. 게임 상태에 이름을 붙인다. 내부적으로 STATE_MENU=0, STATE_PLAYING=1, STATE_GAMEOVER=2로 저장되지만, 코드에서 숫자 대신 이름을 쓸 수 있어 가독성이 좋다
+> - `float timeLeft` : 초(秒) 단위 남은 시간. `120.0f`로 시작해서 매 프레임 `GetFrameTime()`만큼 감소 (Level 07)
+> - 모든 게임 데이터를 `Game` 하나에 묶는 이유: 여러 함수 사이에 데이터를 전달할 때 인자가 많아지는 것을 방지. `game_try_remove(&game)` 한 줄로 모든 상태에 접근 가능
+
 ```c
 /* game.c */
 #include "game.h"
@@ -181,6 +207,12 @@ void game_init(Game *game)
     game->clearTime   = 0.0f;
 }
 ```
+
+> **코드 설명**
+> - `game->board` : Game 구조체 안에 Board가 들어있다. `game_init`에서 Board 초기화를 포함해서 처리
+> - `game->drag.active = false` : 드래그 상태를 명시적으로 초기화. C에서 지역 변수는 초기화하지 않으면 쓰레기값이 들어있을 수 있다
+> - `120.0f` : float 리터럴. `120`은 int, `120.0f`는 float. `timeLeft`가 float이므로 타입을 맞춰준다
+> - `STATE_PLAYING` : Level 08에서 메뉴 화면을 추가할 때 `STATE_MENU`로 변경
 
 ---
 
@@ -225,6 +257,11 @@ int main(void)
     return 0;
 }
 ```
+
+> **코드 설명**
+> - 게임 루프의 구조: **업데이트(로직) → 렌더링** 순서. 매 프레임 이 두 단계를 반복
+> - `drag_update(&game.drag)` : `game.drag`의 주소를 넘겨 드래그 상태를 갱신. `BeginDrawing()` **전**에 호출해야 입력을 먼저 처리하고 그린다
+> - `draw_drag_box(&game.drag, 0)` : sum을 0으로 고정해서 아직 항상 흰색 박스. Level 05에서 실제 합산값으로 교체
 
 ---
 

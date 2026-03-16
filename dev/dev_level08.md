@@ -26,6 +26,11 @@
                             → STATE_PLAYING  (또는 STATE_MENU로 돌아가기)
 ```
 
+> **흐름 설명**
+> - 이것이 **상태 머신(State Machine)** 패턴. 게임이 특정 상태에 있을 때는 그에 맞는 로직만 실행되고, 조건이 충족되면 다른 상태로 전환
+> - 각 상태는 이전에 선언한 `GameState` 열거형 값(STATE_MENU, STATE_PLAYING, STATE_GAMEOVER)으로 표현
+> - 이 패턴의 장점: 메뉴에서 실수로 타이머가 돌거나, 게임오버 화면에서 드래그가 되는 등의 버그를 상태 체크만으로 방지
+
 ---
 
 ## 2단계 — game.c 수정
@@ -46,6 +51,10 @@ void game_init(Game *game)
     game->clearTime   = 0.0f;
 }
 ```
+
+> **코드 설명**
+> - `STATE_MENU`로 초기화: 이제 프로그램 시작 시 바로 게임이 시작되지 않고 메뉴 화면이 먼저 표시된다
+> - R키로 재시작해도 `game_init`을 호출하면 메뉴로 돌아가도록 할 수 있고, 아래 `game_start`를 따로 만들어 바로 PLAYING으로 전환할 수도 있다
 
 ---
 
@@ -114,6 +123,13 @@ void draw_menu(void)
     DrawText("T : 연한 색 토글", 20, 570, 16, DARKGRAY);
 }
 ```
+
+> **코드 설명**
+> - `ClearBackground`를 draw_menu 안에서 호출: 메뉴 화면은 게임 화면(어두운 회색)과 다른 배경색(어두운 남색)을 쓰기 때문. main.c에서 따로 ClearBackground를 호출하지 않아도 된다
+> - `const char *title = "Fruit Box"` : 문자열 리터럴을 포인터로 받는다. `char title[] = "Fruit Box"`와 동작은 비슷하지만, 포인터 방식이 MeasureText 같은 함수에 바로 전달하기 편하다
+> - `1010 / 2 - title_w / 2` : 수평 중앙 정렬 공식. 창 너비의 절반 - 텍스트 너비의 절반 = 텍스트의 시작 x 좌표
+> - `double t = GetTime()` : 프로그램 실행 이후 경과 시간(초)을 반환. `double`을 쓰는 이유 — float은 약 7자리 유효숫자, double은 약 15자리. 오래 실행될수록 초 단위 정밀도가 중요해진다
+> - `(int)(t * 2) % 2 == 0` : 깜빡임 구현. `t * 2`는 1초에 2씩 증가. `(int)`로 소수점을 버리면 0, 0, 1, 1, 2, 2... 패턴이 된다. `% 2 == 0`이면 짝수 구간(보임), 홀수 구간(안 보임)으로 0.5초 주기 깜빡임
 
 ---
 
@@ -219,6 +235,12 @@ int main(void)
 }
 ```
 
+> **코드 설명**
+> - `case STATE_MENU:` 블록 : SPACE를 누르면 게임 데이터를 초기화하고 STATE_PLAYING으로 전환. `board_init`으로 새 사과 배치를 생성
+> - `case STATE_GAMEOVER:` : R키는 바로 재시작, M키는 메뉴로 복귀. 두 가지 선택지를 제공
+> - **렌더링 분기**: STATE_MENU일 때는 `draw_menu()`만 호출 (내부에서 ClearBackground 포함). 그 외 상태에서는 게임 화면을 그리고, 추가로 STATE_GAMEOVER일 때만 오버레이를 그린다
+> - 메뉴 → 플레이 전환 시 초기화 코드가 중복된다. 이 중복을 없애는 방법이 아래 `game_start` 함수
+
 > `draw_menu` 안에서 `ClearBackground`를 직접 호출하므로 메뉴 상태에서는
 > `BeginDrawing()` 바로 뒤에 `draw_menu()`만 호출하면 된다.
 
@@ -257,6 +279,10 @@ void game_start(Game *game)
     game->state       = STATE_PLAYING;
 }
 ```
+
+> **코드 설명**
+> - `game_init`과 `game_start`를 분리하는 이유: `game_init`은 오디오, thinColor 등 프로그램 전체 초기화. `game_start`는 새 판 시작만. R키로 재시작할 때 오디오를 다시 초기화할 필요는 없다
+> - `thinColor`를 초기화하지 않는 것도 의도적: 연한 색 모드는 플레이어 설정이므로 재시작해도 유지
 
 main.c에서 `board_init(...); ... game.state = STATE_PLAYING;` 블록을 `game_start(&game);` 한 줄로 교체.
 

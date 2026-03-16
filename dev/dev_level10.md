@@ -67,6 +67,12 @@ void audio_unload(AudioAssets *audio);
 #endif /* AUDIO_H */
 ```
 
+> **코드 설명**
+> - `Music bgm` vs `Sound pop` : Raylib에서 두 타입의 차이가 중요하다
+>   - `Sound` : 파일 전체를 **메모리에 한 번에 올려** 재생. 짧은 효과음에 적합. 로딩 후 즉시 재생 가능
+>   - `Music` : 파일을 **스트리밍(조금씩 읽으며)** 재생. 긴 BGM 파일을 메모리에 다 올리지 않아도 되어 효율적. 대신 매 프레임 `UpdateMusicStream()`을 호출해야 끊기지 않는다
+> - `bool loaded` : 오디오 파일이 없어도 게임이 크래시되지 않도록 하는 안전장치. 파일을 못 찾으면 `loaded = false`로 두고, 모든 오디오 함수에서 이 플래그를 먼저 확인한다
+
 ```c
 /* audio.c */
 #include "audio.h"
@@ -141,6 +147,15 @@ void audio_unload(AudioAssets *audio)
 }
 ```
 
+> **코드 설명**
+> - `InitAudioDevice()` : Raylib 오디오 시스템을 초기화. `InitWindow()` 이후에 호출해야 한다. 프로그램 종료 전 `CloseAudioDevice()`로 정리
+> - `FileExists("assets/sounds/bgm.ogg")` : Raylib 함수. 파일이 실제로 존재하면 `true`. 없는 파일을 `LoadMusicStream`으로 로드하면 오류가 나므로 미리 확인
+> - `||` 조건: 세 파일 중 하나라도 없으면 오디오 없이 진행. 일부만 있는 상황을 단순하게 처리
+> - `SetMusicVolume(audio->bgm, 0.5f)` : 0.0(무음) ~ 1.0(최대 볼륨). BGM을 0.5f로 낮추면 효과음이 묻히지 않는다
+> - `audio->loaded = true` : 모든 로딩이 성공한 후에만 true. 이후 모든 오디오 함수의 첫 줄에서 이 값을 확인하므로, 로딩 실패 시 어떤 함수도 실제 오디오 처리를 하지 않는다
+> - `UpdateMusicStream(audio->bgm)` : BGM이 끊기지 않고 계속 재생되려면 매 프레임 이 함수를 호출해야 한다. `Sound`는 이런 처리가 필요 없다. main.c의 게임 루프 최상단에서 호출
+> - `audio_unload` : `loaded`가 false일 때도 `CloseAudioDevice()`는 호출해야 한다. 파일 로딩 실패 시에도 `InitAudioDevice()`는 이미 호출되었기 때문
+
 ---
 
 ## 3단계 — Game 구조체에 AudioAssets 추가
@@ -182,6 +197,11 @@ void game_init(Game *game)
     /* audio는 main에서 별도로 audio_init 호출 — game_init마다 재초기화 금지 */
 }
 ```
+
+> **코드 설명**
+> - `AudioAssets audio` : Game 구조체 안에 오디오 데이터를 포함. 이제 `game.audio`로 모든 오디오 상태에 접근 가능
+> - `bool gameoverSoundPlayed` : 게임오버 효과음 **중복 재생 방지**용 플래그. 게임오버 상태가 되는 순간 한 번만 재생해야 하는데, main.c 루프가 계속 돌면서 같은 조건이 매 프레임 충족되어 효과음이 반복되는 버그를 막는다
+> - `/* audio는 main에서 별도로 audio_init 호출 */` : `game_init`이 R키 재시작에서도 호출되는데, 그때마다 `audio_init`을 다시 호출하면 오디오 장치를 다시 열고 파일을 다시 로드하는 비효율이 생긴다. 오디오는 최초 1회만 초기화
 
 ---
 
@@ -308,6 +328,14 @@ int main(void)
     return 0;
 }
 ```
+
+> **코드 설명**
+> - `audio_init(&game.audio)` : `InitWindow()` 이후, 게임 루프 시작 전에 딱 한 번 호출. `game_init`과 별도로 초기화
+> - `audio_update(&game.audio)` : 게임 루프 최상단에서 매 프레임 호출. switch 블록보다 앞에 두어야 어느 상태에서든 BGM이 끊기지 않는다
+> - `int before = game.score; game_try_remove(&game); if (game.score > before)` : 사과 제거 전후 점수를 비교해서 실제로 제거됐을 때만 효과음 재생. `game_try_remove`가 반환값이 없으므로 이 방식으로 제거 여부를 감지
+> - `if (game.state == STATE_GAMEOVER && !game.gameoverSoundPlayed)` : `STATE_PLAYING` 케이스 안에서, `timer_update`나 `check_all_cleared`로 인해 방금 게임오버로 전환됐을 때를 감지. `!gameoverSoundPlayed`로 한 번만 실행
+> - `game.gameoverSoundPlayed = false` (R키 재시작 시): 새 게임 시작 전에 플래그를 리셋해야 다음 게임오버 때 효과음이 다시 재생된다
+> - `audio_unload(&game.audio)` : `CloseWindow()` **전**에 오디오를 먼저 정리. 순서를 바꾸면 오디오 장치가 닫힌 후에 메모리를 해제하려 해서 오류 발생 가능
 
 ---
 
